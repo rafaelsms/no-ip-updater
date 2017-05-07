@@ -17,7 +17,7 @@ logger = logging.basicConfig(filename='noip-updater.log', format='%(asctime)s %(
 
 
 class Configuration:
-    def __init__(self, configuration_directory):
+    def __init__(self):
         self.sectionName = 'DEFAULT'
         self.configuration = configparser.ConfigParser()
         self.configurationFile = os.path.expanduser('configuration.ini')
@@ -44,7 +44,7 @@ class Configuration:
     def save_configuration(self):
         with open(str(self.configurationFile), 'w') as fileWriter:
             self.configuration.write(fileWriter)
-            logging.info('Wrote default configuration file on ' + self.configurationFile)
+            logging.info('Wrote configuration file on ' + self.configurationFile)
 
     def read_configuration(self):
         self.configuration.read(self.configurationFile)
@@ -74,14 +74,8 @@ def noip_update(authorization, hostname, ip=None):
 
 class Updater:
     def __init__(self):
-        logging.info('Checking configuration directory')
-        configuration_directory = os.path.join(os.path.expanduser('~'), '.noip-updater')
-        if not os.path.exists(configuration_directory):
-            os.mkdir(configuration_directory)
-            logging.info('Created configuration folder at ' + str(configuration_directory))
-
         logging.info('Reading configuration')
-        self.configuration = Configuration(configuration_directory)
+        self.configuration = Configuration()
         if len(self.configuration['no-ip-authorization']) is 0:
             username = input("Enter the no-ip username: ")
             password = getpass.getpass("Enter the password: ")
@@ -91,6 +85,9 @@ class Updater:
             self.configuration['no-ip-update-interval-minutes'] = \
                 input("Enter the interval to no-ip update in minutes: ")
             self.configuration.save_configuration()
+            print("Configuration was saved. Install application on /opt/No-IP-Updater/ and " + \
+                  "use 'systemctl start noip-updater.service'")
+            exit(0)
 
         logging.info('Creating scheduler')
         jobstores = {'default': SQLAlchemyJobStore(url='sqlite:///jobs.sqlite')}
