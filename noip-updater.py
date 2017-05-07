@@ -20,12 +20,11 @@ class Configuration:
     def __init__(self, configuration_directory):
         self.sectionName = 'DEFAULT'
         self.configuration = configparser.ConfigParser()
-        self.configurationFile = os.path.join(configuration_directory, 'configuration.ini')
+        self.configurationFile = os.path.expanduser('configuration.ini')
         # Writing default configuration file
         if not os.path.exists(self.configurationFile):
             self.configuration[self.sectionName] = {
-                'no-ip-username': 'username',
-                'no-ip-password': 'password',
+                'no-ip-authorization': '',
                 'no-ip-hostname': 'mytest.testdomain.com',
                 'no-ip-update-interval-minutes': 5
             }
@@ -58,11 +57,10 @@ def task_listener(event):
         logging.info('No-ip should be updated!')
 
 
-def noip_update(username, password, hostname, ip=None):
+def noip_update(authorization, hostname, ip=None):
     headers = {
         'Host': hostname,
-        'Authorization': 'Basic {}'.format(
-            base64.b64encode('{}:{}'.format(username, password).encode('utf-8')).decode()),
+        'Authorization': 'Basic {}'.format(authorization),
         'User-Agent': 'PythonPersonalUpdater/v0.1 rafael.sartori96@gmail.com'
     }
 
@@ -84,9 +82,11 @@ class Updater:
 
         logging.info('Reading configuration')
         self.configuration = Configuration(configuration_directory)
-        if self.configuration['no-ip-username'].lower() == 'username':
-            self.configuration['no-ip-username'] = input("Enter the no-ip username: ")
-            self.configuration['no-ip-password'] = getpass.getpass("Enter the password: ")
+        if len(self.configuration['no-ip-authorization']) is 0:
+            username = input("Enter the no-ip username: ")
+            password = getpass.getpass("Enter the password: ")
+            self.configuration['no-ip-authorization'] = base64.b64encode("{}:{}".format(username, password)
+                                                                         .encode('utf-8')).decode()
             self.configuration['no-ip-hostname'] = input("Enter the hostname (ex. mytest.testdomain.com): ")
             self.configuration['no-ip-update-interval-minutes'] = \
                 input("Enter the interval to no-ip update in minutes: ")
@@ -99,8 +99,7 @@ class Updater:
         if self.scheduler.get_job(job_id='no-ip-update-task') is None:
             logging.info("Registering job 'no-ip-update-task'")
             self.scheduler.add_job(noip_update, 'interval', [
-                self.configuration['no-ip-username'],
-                self.configuration['no-ip-password'],
+                self.configuration['no-ip-authorization'],
                 self.configuration['no-ip-hostname']
             ], id='no-ip-update-task', max_instances=1, replace_existing=True,
                                    minutes=int(self.configuration['no-ip-update-interval-minutes']))
@@ -124,6 +123,7 @@ class Updater:
 def main():
     logging.info("=== No-IP Updater - Rafael 'jabyftw' Sartori v0.1 ===")
     updater = Updater()
+
 
 if __name__ == '__main__':
     main()
