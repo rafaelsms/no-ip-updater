@@ -10,7 +10,8 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-os.remove('noip-updater.log')
+if os.path.exists('noip-updater.log'):
+    os.remove('noip-updater.log')
 logger = logging.basicConfig(filename='noip-updater.log', format='%(asctime)s %(levelname)s: %(message)s',
                              datefmt='%d-%m-%Y %H:%M:%S', level='INFO')
 
