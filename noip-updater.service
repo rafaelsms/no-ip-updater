@@ -1,0 +1,12 @@
+[Unit]
+Description=No-IP updater
+After=multi-user.target
+
+[Service]
+Type=idle
+WorkingDirectory=/opt/No-IP-Updater/
+ExecStart=/usr/bin/python3 /opt/No-IP-Updater/noip-updater.py
+
+[Install]
+WantedBy=multi-user.target
+
