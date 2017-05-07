@@ -1,17 +1,18 @@
 import os
-import base64
 import atexit
+import base64
 import getpass
 import logging
+import http.client
 import configparser
 
-from http.client import HTTPConnection
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.blocking import BlockingScheduler
 
+os.remove('noip-updater.log')
 logger = logging.basicConfig(filename='noip-updater.log', format='%(asctime)s %(levelname)s: %(message)s',
-                             datefmt='%d-%m-%Y %H:%M:%S')
+                             datefmt='%d-%m-%Y %H:%M:%S', level='INFO')
 
 
 class Configuration:
@@ -43,7 +44,7 @@ class Configuration:
     def save_configuration(self):
         with open(str(self.configurationFile), 'w') as fileWriter:
             self.configuration.write(fileWriter)
-            print('Wrote default configuration file on ' + self.configurationFile)
+            logging.info('Wrote default configuration file on ' + self.configurationFile)
 
     def read_configuration(self):
         self.configuration.read(self.configurationFile)
@@ -53,33 +54,34 @@ def task_listener(event):
     if event.exception:
         logging.error("Task didn't work as excepted: " + str(event.exception))
     else:
-        logging.info('No-ip should be updated')
+        logging.info('No-ip should be updated!')
 
 
-def noip_update(username, password, hostname):
-    # http_connection = HTTPConnection(host='https://dynupdate.no-ip.com/nic/update', port=80, timeout=15)
-    # request = http_connection.request(method='GET', url='https://dynupdate.no-ip.com/',
-    #                                   body='nic/update?hostname=' + hostname,
-    #                                   headers={'Host': 'dynupdate.no-ip.com',
-    #                                            'Authorization': 'Basic base64-encoded-auth-string',
-    #                                            'User-Agent': 'pythonprogram/0.1'
-    #                                            })
-    # http_connection.send(request)
-    # response = http_connection.getresponse()
-    # logging.debug('HttpResponse:' + str(response))
-    # http_connection.close()
-    return
+def noip_update(username, password, hostname, ip=None):
+    headers = {
+        'Host': hostname,
+        'Authorization': 'Basic {}'.format(
+            base64.b64encode('{}:{}'.format(username, password).encode('utf-8')).decode()),
+        'User-Agent': 'PythonPersonalUpdater/v0.1 rafael.sartori96@gmail.com'
+    }
+
+    connection = http.client.HTTPConnection('dynupdate.no-ip.com', 80, timeout=5)
+    url = '/nic/update?hostname={}'.format(hostname) if ip is None \
+        else '/nic/update?hostname={}&myip={}'.format(hostname, ip)
+    connection.request('GET', url, headers=headers)
+    response = connection.getresponse()
+    logging.debug('HTTP Response: {} {} "{}"'.format(response.status, response.reason, response.read()))
 
 
 class Updater:
     def __init__(self):
-        print('Checking configuration directory')
+        logging.info('Checking configuration directory')
         configuration_directory = os.path.join(os.path.expanduser('~'), '.noip-updater')
         if not os.path.exists(configuration_directory):
             os.mkdir(configuration_directory)
-            print('Created configuration folder at ' + str(configuration_directory))
+            logging.info('Created configuration folder at ' + str(configuration_directory))
 
-        print('Reading configuration')
+        logging.info('Reading configuration')
         self.configuration = Configuration(configuration_directory)
         if self.configuration['no-ip-username'].lower() == 'username':
             self.configuration['no-ip-username'] = input("Enter the no-ip username: ")
@@ -89,20 +91,26 @@ class Updater:
                 input("Enter the interval to no-ip update in minutes: ")
             self.configuration.save_configuration()
 
-        print('Starting scheduler')
+        logging.info('Creating scheduler')
         jobstores = {'default': SQLAlchemyJobStore(url='sqlite:///jobs.sqlite')}
         self.scheduler = BlockingScheduler(jobstores)
+
         if self.scheduler.get_job(job_id='no-ip-update-task') is None:
-            logging.info("Registering job 'no-ip-update-task")
+            logging.info("Registering job 'no-ip-update-task'")
             self.scheduler.add_job(noip_update, 'interval', [
                 self.configuration['no-ip-username'],
                 self.configuration['no-ip-password'],
                 self.configuration['no-ip-hostname']
             ], id='no-ip-update-task', max_instances=1, replace_existing=True,
                                    minutes=int(self.configuration['no-ip-update-interval-minutes']))
+
+        # Register listener
+        logging.info('Registering listener')
         self.scheduler.add_listener(task_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
-        print('Registering quit task')
+
+        logging.info('Registering quit task')
         atexit.register(self.exit_handler)
+
         logging.info('Starting scheduler')
         self.scheduler.start()
 
@@ -113,9 +121,8 @@ class Updater:
 
 
 def main():
-    print("=== No-IP Updater - Rafael 'jabyftw' Sartori v0.1 ===")
+    logging.info("=== No-IP Updater - Rafael 'jabyftw' Sartori v0.1 ===")
     updater = Updater()
-
 
 if __name__ == '__main__':
     main()
